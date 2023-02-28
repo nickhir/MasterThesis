@@ -12,7 +12,6 @@ Visualize the data before and after different filtering steps. See Methods secti
 
 ```{r setup, echo=F, message=F, error=F}
 knitr::opts_chunk$set(echo = T, message = F, warning = F)
-knitr::opts_knit$set(root.dir = '/g/huber/users/hirschmueller/DECODE/MasterThesis/html')
 ```
 
 
@@ -23,6 +22,7 @@ library(scran)
 library(scales)
 library(patchwork)
 library(parallel)
+
 
 # load the plot theme
 source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
@@ -332,6 +332,7 @@ DDDDDD
 #EEEE#
 ' 
 
+
 combined_plot <- wrap_plots(list(knee_plots,
                                  umi_plot,
                                  genes_plot,
@@ -348,11 +349,14 @@ ggsave(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/prepro
 ```
  
 
-```{r, echo=T, fig.width=8, fig.height=12.5, fig.align="center", dpi=500}
+```{r, echo=T, fig.width=8, fig.height=12.5, fig.align="center", dpi=300}
 combined_plot
 ```
 
-
+```{r,eval=F}
+rmarkdown::render("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/preprocessing_sup1.Rmd", 
+                  output_dir = "/g/huber/users/hirschmueller/DECODE/MasterThesis/html")
+```
 
 ```{r, echo=T}
 sessionInfo()

@@ -1,0 +1,130 @@
+---
+title: "DECODE Doublet Detection"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+
+### Introduction
+Show output of the doublet detection algorithms.
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F)
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(Seurat)
+library(patchwork)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+```{r}
+# load data
+ctrl_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/DoubletDetection/seurat_integrated_doublet_label.qs")
+ctrl_integrated$celltype_manual <- ifelse(ctrl_integrated$celltype_manual=="HSP-EB","EB",ctrl_integrated$celltype_manual)
+
+ctrl_integrated_singlet <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/DoubletDetection/seurat_integrated_only_singlets.qs")
+ctrl_integrated_singlet$celltype_manual <- ifelse(ctrl_integrated_singlet$celltype_manual=="HSP-EB","EB",ctrl_integrated_singlet$celltype_manual)
+```
+
+```{r}
+#######################
+# CELLTYPE ANNOTATION #
+####################### 
+p_celltype <- DimPlot(ctrl_integrated,
+                      pt.size = 0.007,
+                      group.by = "celltype_manual",
+                      label = T,
+                      label.box = T,repel = T,
+                      label.size = 2.7)+
+  theme_UMAP()+
+  NoLegend()+
+  ggtitle("Celltype Annotation")+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5),
+        legend.position = "none")
+
+
+
+#################
+# DoubletFinder #
+#################
+doublet_labels <- rownames(ctrl_integrated[, ctrl_integrated$doublet_label=="Doublet"]@meta.data)
+p_doubletFinder<-DimPlot(ctrl_integrated,
+                         pt.size = 0.007,
+                         cells.highlight= list("Doublet"=doublet_labels), 
+                         cols.highlight = "darkred", cols= "grey",
+                         sizes.highlight = 0.15)+
+  theme_UMAP()+
+  NoLegend()+
+  ggtitle("DoubletFinder")+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
+
+############
+# Scrublet #
+############
+doublet_labels <- rownames(ctrl_integrated[,ctrl_integrated$scrublet_prediction=="Doublet"]@meta.data)
+p_scrublet<-DimPlot(ctrl_integrated, 
+                    pt.size = 0.007,
+                    cells.highlight= list("Doublet"=doublet_labels), 
+                    cols.highlight = "darkred", cols= "grey",
+                    sizes.highlight = 0.15)+
+  theme_UMAP()+
+  NoLegend()+
+  ggtitle("Scrublet")+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
+
+####################
+# DOUBLETS REMOVED #
+####################
+p_singlets<-DimPlot(ctrl_integrated_singlet,
+                    reduction = "umap", 
+                    group.by = "celltype_manual", 
+                    label = T,
+                    label.box = T,
+                    repel = T,
+                    pt.size = 0.007,
+                    label.size = 2.7) +
+  theme_UMAP()+
+  NoLegend()+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  scale_y_reverse() + # we do this so the orientation is similar to the "original". Doesnt actually change any data and is only used for visualization
+  ggtitle("Celltype Annotation\nw/o Doublets")+
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
+```
+
+
+```{r, fig.width=7, fig.height=2.58, fig.align="center", dpi=300}
+combined <- wrap_plots(p_celltype, p_doubletFinder, p_scrublet, p_singlets, nrow = 1) +
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 15, face="bold"))
+
+ggsave("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/doublets.png",
+       dpi=500, width = 10, height = 3.5, plot=combined)
+
+combined
+```
+
+
+```{r, eval=F, echo=F}
+rmarkdown::render("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/doublets_sup2.Rmd",
+                  output_dir = "/g/huber/users/hirschmueller/DECODE/MasterThesis/html/")
+```
+
+
+```{r}
+sessionInfo()
+```

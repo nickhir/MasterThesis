@@ -1,0 +1,125 @@
+---
+title: "DECODE Cell Cycle"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+
+### Introduction
+Show output of the cell cycle scoring. 
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F)
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(Seurat)
+library(patchwork)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+
+### Load Data
+```{r}
+# load data
+ctrl <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/CellCycleScoring_ctrl/ctrl_integrated_doublet_CellCycle.qs")
+
+ctrl$celltype_manual <- ifelse(ctrl$celltype_manual=="HSP-EB","EB",ctrl$celltype_manual)
+
+```
+
+
+### Generate Plots
+```{r}
+ctrl$Phase <- factor(ctrl$Phase, levels = c("G1","S","G2M"))
+p_annotation <- DimPlot(ctrl,
+                        pt.size = 0.007,
+                        group.by = "celltype_manual",
+                        label = T,
+                        label.box = T,repel = T,
+                        label.size = 2.7)+
+  theme_UMAP()+
+  NoLegend()+
+  ggtitle("Celltype Annotation")+
+  xlab("UMAP 1")+
+  ylab("UMAP 2")+
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5),
+        legend.position = "none")
+
+
+p_cellcycle <- DimPlot(ctrl,
+                       pt.size = 0.007,
+                       group.by = "Phase",
+                       label =F,
+                       label.box = F,repel = F,
+                       label.size = 2.7)+
+  theme_UMAP()+
+  ggtitle("Cell cycle Phase")+
+  labs(color="Phase")
+
+
+
+# celltype phase progression
+phase_distribution <- ctrl@meta.data %>% 
+  group_by(Phase, celltype_manual) %>% 
+  tally() %>% 
+  left_join(., table(ctrl$celltype_manual) %>%
+              enframe(name="celltype_manual",value="n_total")) %>% 
+  mutate(fraction = n/n_total)%>% 
+  mutate(Phase = factor(Phase, levels = c("G1", "S", "G2M"))) %>% 
+  dplyr::filter(!celltype_manual %in% c("unk","MT")) %>% 
+  mutate(celltype_manual = factor(celltype_manual, levels = c("aEC","pEC","Copper","R3", "EE",
+                                                              "daEC", "dEC","EB", "ISC")))
+
+
+p_cellcycle_distribution <- ggplot(phase_distribution, aes(x=Phase,y=fraction, fill=Phase))+
+  geom_col()+
+  facet_wrap(~celltype_manual) +
+  scale_fill_Publication()+
+  theme_Publication() %+%
+  theme(legend.position = "none")+
+  ylab("Fraction of cells")
+```
+
+### Plot output
+```{r, fig.width=10, fig.height=4, fig.align="center", dpi=300}
+combined <- wrap_plots(p_annotation, p_cellcycle, p_cellcycle_distribution, nrow = 1) +
+  plot_layout(widths = c(1,1,1.5)) +
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 15, face="bold"))
+
+
+ggsave("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/CellCycle.png",
+       dpi=500, width = 10, height = 4, plot=combined)
+
+combined
+```
+
+
+```{r, eval=F, echo=F}
+rmarkdown::render("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/CellCycle_sup3.Rmd",
+                  output_dir = "/g/huber/users/hirschmueller/DECODE/MasterThesis/html/")
+```
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
