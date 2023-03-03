@@ -62,7 +62,8 @@ p_cellcycle <- DimPlot(ctrl,
                        label.size = 2.7)+
   theme_UMAP()+
   ggtitle("Cell cycle Phase")+
-  labs(color="Phase")
+  labs(color="Phase")+
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
 
 
 
@@ -85,7 +86,11 @@ p_cellcycle_distribution <- ggplot(phase_distribution, aes(x=Phase,y=fraction, f
   scale_fill_Publication()+
   theme_Publication() %+%
   theme(legend.position = "none")+
-  ylab("Fraction of cells")
+  ylab("Fraction of cells")+
+  ggtitle("Distribution of Cell Cycle Phase\nper Celltype")+
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5),
+        legend.position = "none")
+
 ```
 
 ### Plot output
