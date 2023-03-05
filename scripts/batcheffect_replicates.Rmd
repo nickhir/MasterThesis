@@ -1,0 +1,167 @@
+---
+title: "Batch effect replicates"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center")
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(scran)
+library(scales)
+library(patchwork)
+library(parallel)
+library(Seurat)
+library(ComplexHeatmap)
+library(circlize)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+
+### Load data
+```{r}
+# load data
+notch_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/integration/seurat_integration.qs")
+
+
+notch_integrated$orig.ident <- case_when(
+    notch_integrated$orig.ident == "TX22_N"~ "Notch\nReplicate 1", 
+    notch_integrated$orig.ident == "TX23_N"~ "Notch\nReplicate 2", 
+    )
+
+notch_merged <- DietSeurat(notch_integrated, counts=T, data=T, assays="RNA") %>% 
+  NormalizeData(., normalization.method = "LogNormalize", scale.factor = 10000) %>% 
+  FindVariableFeatures(., selection.method = "vst", nfeatures = 3000) %>% 
+  ScaleData(.) %>% 
+  RunPCA(., npcs = 50, verbose = T) %>% 
+  RunUMAP(., reduction = "pca", dims = 1:20, verbose = T) 
+
+ctrl_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/integration/seurat_integration.qs")
+
+ctrl_integrated$orig.ident <- case_when(
+    ctrl_integrated$orig.ident == "TX22"~ "Control\nReplicate 1", 
+    ctrl_integrated$orig.ident == "TX23"~ "Control\nReplicate 2", 
+    )
+
+
+ctrl_merged <- DietSeurat(ctrl_integrated, counts=T, data=T, assays="RNA") %>% 
+  NormalizeData(., normalization.method = "LogNormalize", scale.factor = 10000) %>% 
+  FindVariableFeatures(., selection.method = "vst", nfeatures = 3000) %>% 
+  ScaleData(.) %>% 
+  RunPCA(., npcs = 50, verbose = T) %>% 
+  RunUMAP(., reduction = "pca", dims = 1:20, verbose = T) 
+
+```
+
+### Create plots
+```{r}
+color_mapping <- c("#56B4E9", "#8EBD59")
+
+########
+# CTRL #
+########
+ctrl_unintegrated_plots <- DimPlot(ctrl_merged,
+                             group.by = "orig.ident",
+                             pt.size = 0.01) +
+  theme_UMAP() +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        plot.title = element_text(size=12, face="bold", hjust=0.5))+
+  ggtitle("Control condition\nUnintegrated")+
+  scale_y_reverse() +
+  scale_x_reverse() +
+  scale_color_manual(values = color_mapping)+
+  NoLegend()
+
+ctrl_integrated_plots <- DimPlot(ctrl_integrated,
+                             group.by = "orig.ident",
+                             pt.size = 0.01) +
+  theme_UMAP() +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.text = element_text(margin = margin(b = 9, unit = "pt")),
+        plot.title = element_text(size=12, face="bold", hjust=0.5))+
+  ggtitle("Control condition\nIntegrated")+
+  scale_y_reverse()+
+  scale_color_manual(values = color_mapping)
+
+
+#########
+# NOTCH #
+#########
+notch_unintegrated_plots <- DimPlot(notch_merged,
+                             group.by = "orig.ident",
+                             pt.size = 0.01) +
+  theme_UMAP() +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        plot.title = element_text(size=12, face="bold", hjust=0.5))+
+  ggtitle("Notch-knockout condition\nUnintegrated")+
+  scale_y_reverse() +
+  scale_x_reverse() +
+  scale_color_manual(values = color_mapping)+
+  NoLegend()
+
+notch_integrated_plots <- DimPlot(notch_integrated,
+                             group.by = "orig.ident",
+                             pt.size = 0.01) +
+  theme_UMAP() +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        plot.title = element_text(size=12, face="bold", hjust=0.5),
+        legend.text = element_text(margin = margin(b = 9, unit = "pt")))+
+  ggtitle("Notch-knockout condition\nIntegrated")+
+  scale_x_reverse()+
+  scale_color_manual(values = color_mapping)
+
+
+combined_plots <- wrap_plots(ctrl_unintegrated_plots,
+             ctrl_integrated_plots,
+             notch_unintegrated_plots,
+             notch_integrated_plots,ncol=2) + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 15, face="bold"))
+
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/batcheffect_replicates.png", width = 15.7, height = 10, res=800, units = "cm", scaling = 0.52)
+combined_plots
+dev.off()
+
+
+
+```
+
+
+
+
+```{r}
+rmarkdown::render("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/batcheffect_replicates.Rmd", 
+                  output_dir = "/g/huber/users/hirschmueller/DECODE/MasterThesis/html")
+```
+
+
+
+
+
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+

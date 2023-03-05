@@ -1,0 +1,323 @@
+---
+title: "Pseudotime analysis"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+### Introduction
+Show pseudotime analysis. Here, the plots were combined manually, because complex heatmap is hard to work in a patchwork.
+
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F,fig.align = "center")
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(slingshot)
+library(tradeSeq)
+library(patchwork)
+library(Seurat)
+library(SingleCellExperiment)
+library(ComplexHeatmap)
+library(circlize)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+
+### Load data
+```{r}
+# load seurat data
+seurat <- qs::qread(file="/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/integration_notch_ctrl/ctrl_notch_reference_integration.qs")
+seurat@meta.data$celltype_manual <- ifelse(seurat$celltype_manual == "HSP-EB", "EB",seurat$celltype_manual)
+
+# remove celltypes where we are unsure of their origin or which would clutter the visualization. 
+celltypes_remove <- c("MT","unk","unk2", "R3")
+seurat_subset <- seurat[,!seurat$celltype_manual %in% celltypes_remove]
+
+# load subtypes of ees
+ee_population_info_notch <- data.table::fread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/subclustering/EE/mdata_ee_classification.tsv",
+                                        sep="\t",data.table = F)
+
+ee_population_info_ctrl <- data.table::fread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/subclustering/EE/mdata_ee_classification.tsv",
+                                        sep="\t",data.table = F)
+ee_population_info <- rbind(ee_population_info_ctrl, ee_population_info_notch)
+
+seurat_subset@meta.data$Barcode_unique <- rownames(seurat_subset@meta.data)
+
+seurat_subset@meta.data <- seurat_subset@meta.data %>% 
+  left_join(.,ee_population_info, by=c("Barcode_unique"))
+rownames(seurat_subset@meta.data) <- seurat_subset$Barcode_unique
+
+seurat_subset@meta.data$tmp_celltype <- case_when(
+  seurat_subset$celltype_manual == "daEC" ~ "dEC",
+  seurat_subset$EE_subtype == "EEP" ~ "EEP",
+  T ~ seurat_subset$celltype_manual
+)
+
+# just to make visually more pleasing (diff from left to right)
+seurat_subset[["pca_mod"]] <- CreateDimReducObject(
+  embeddings = Embeddings(seurat_subset,reduction = "pca")*-1, 
+  key = "PCAmod_",
+  assay = "integrated")
+
+
+# load slingshot results
+ss_EEP_no_end_ISC <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/ss_EEP_no_end_ISC.qs")
+
+# load transcription factor list (downloaded from flymine)
+tf_list <- data.table::fread("/g/huber/users/hirschmueller/DECODE/raw_data/TF_list/flymine_results_2023-01-11T00-54-01.tsv", header = F, data.table = F)
+
+# We used tradeseq to generate a dataframe which we can use to quickly plot pseudotimes. 
+smoothers_data <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/plotSmoothers_data.qs")
+
+# fitted GAM from tradeseq
+gam_fit_7 <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/GAM_7.qs")
+
+# results of tradeSeq analysis
+assoc_results_split <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/assoc_results_7.qs")
+```
+
+
+### Pseudotime
+```{r, fig.width=6.3, fig.height = 3, dpi=500}
+sshot = SlingshotDataSet(ss_EEP_no_end_ISC)
+pseudotime_df <- slingPseudotime(sshot)
+
+# plot one trajectory after another and color according to pseudotime.
+trajectory_plots <- lapply(paste0("Lineage",1:4),function(x){
+  lineage_sting <- paste0(sshot@lineages[[x]], collapse=" -> ")
+  
+  curve_df <- data.frame(sshot@curves[[x]]$s[sshot@curves[[x]]$ord,])
+  seurat_subset$time <- pseudotime_df[,x]
+  
+  p <- FeaturePlot(seurat_subset, "time",reduction = "pca_mod",pt.size = 0.1)+
+    geom_path(data = curve_df, mapping=aes(PCAmod_1,PCAmod_2), linewidth=0.6)+
+    theme_UMAP() +
+    theme(legend.position = "right",
+          legend.direction = "vertical",
+          legend.key.size= unit(0.5, "cm"),
+          legend.spacing = unit(0.17, "cm"),
+          legend.title = element_text(face="bold",size=8.5),
+          legend.text = element_text(size=11,face="bold"),
+          plot.title = element_text(size=14, face="bold", hjust = 0.5))+
+    viridis::scale_color_viridis()+
+    ggtitle(paste0(x,":\n", lineage_sting))+
+    xlab("PC1")+
+    ylab("PC2")+
+    labs(color="Pseudotime")
+  return(p)
+})
+names(trajectory_plots) <- paste0("Lineage",1:4)
+
+
+p <- DimPlot(seurat_subset, 
+        group.by = "tmp_celltype", 
+        reduction = "pca_mod",
+        label = T,
+        label.box = F,
+        pt.size = 0.1,
+        repel = T,
+        shuffle = T,
+        label.size = 4.5)+
+  theme_UMAP()+
+  theme(legend.key.size = unit(0.4, "cm"),
+        legend.title = element_text(size=9,face="bold"),
+        legend.text = element_text(size=7,face="bold"),
+        legend.spacing = unit(0.05, "cm"),
+        plot.title = element_text(size=14, face="bold", hjust = 0.5))+
+  xlab("PC1")+
+  ylab("PC2")+
+  ggtitle("Celltype\nannotation")+
+  labs(color="Celltype")+
+  chameleon::scale_color_chameleon(minimal_lightness = 45)+
+  chameleon::scale_fill_chameleon(minimal_lightness = 45)
+
+layout <- "
+###AAABBB
+EEEAAABBB
+EEEAAABBB
+EEECCCDDD
+EEECCCDDD
+###CCCDDD
+"
+combined_plot <- (trajectory_plots$Lineage1 +
+  trajectory_plots$Lineage2 +
+  trajectory_plots$Lineage3 +
+  trajectory_plots$Lineage4 +
+  p) + 
+  plot_layout(design = layout)
+
+
+ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/pseudotime_agg.png",
+              width=15, height = 7.5, units="cm",res=500, scaling = 0.5)
+combined_plot
+dev.off()
+
+combined_plot
+```
+
+
+
+### Heatmap
+```{r, dpi=500, fig.width=4.3, fig.height=3.3}
+# genes whos expression changes significantly along lineage4
+lineage_4_associated_genes <- assoc_results_split$Lineage4 %>% 
+  filter(padj_ctrl<0.05 | padj_notch<0.05) %>% 
+  pull(gene)
+
+# which one of these are TF?
+sig_tf <- tf_list$V2[tf_list$V2 %in% lineage_4_associated_genes]
+
+# we dont want to plot all genes (to crowded) so we remove some unintersting ones
+# we checked there expression before removing them, but we skip this here
+remove <- c("drm", "h","CG12054", "Hr96", "apt","sna", "Sox21a", "fkh",
+            "Dsp1","E2f1","Ssrp", "HmgD", "peb", "tap", "sug", "Glut4EF",
+            "emc")
+
+sig_tf <- sig_tf[!sig_tf %in% remove]
+# along trajectory 4 predict how gene expression changes
+yhatSmooth <- predictSmooth(gam_fit_7, gene = sig_tf, nPoints = 200, tidy = FALSE)
+yhatSmooth_subset <- yhatSmooth[,grepl("lineage4_",colnames(yhatSmooth))]
+
+####################
+# GENERATE HEATMAP #
+####################
+column_names <-  c(rep("Control",200),
+                   rep("Notch-knockout", 200))
+ha = HeatmapAnnotation(perturbation = 
+                         anno_block(gp = gpar(fill = c(color_mapping[1],
+                                                       color_mapping[3])),
+                                                 labels = c("Control", "Notch-knockout"),
+                                                 labels_gp = gpar(col = "black", 
+                                                                  fontsize = 6,
+                                                                  fontface="bold")))
+m <- as.matrix(yhatSmooth_subset) %>% t() %>% scale() %>% t()
+rownames(m) <- rownames(yhatSmooth_subset)
+cap_value=3
+m[m>cap_value] = cap_value 
+m[m < -cap_value] = -cap_value 
+col_fun = colorRamp2(c(-cap_value, 0, cap_value), c("blue", "white", "red"))
+
+heatmap <- Heatmap(m,
+             cluster_rows = T, 
+             cluster_columns = F, 
+             show_row_names = T, 
+             show_column_names = F,
+             show_row_dend = F,
+             name="Z-score",
+             border = "black",
+             top_annotation = ha,
+             row_names_gp = grid::gpar(fontsize = 8),
+             column_split = column_names,
+             use_raster = F,
+             column_title = "TF expression\nLineage: ISC -> EEP -> EE",
+             column_title_gp = gpar(fontsize = 7, fontface="bold"),
+             column_title_rot = 0,
+             show_heatmap_legend = F,
+             heatmap_legend_param = list(at = c(-cap_value, -1.5, 0, 1.5, cap_value),
+                                         x=unit(10,"cm"),y=unit(5,"cm")))
+
+lgd <- Legend(at = c(-cap_value, -1.5, 0, 1.5, cap_value), col_fun=col_fun, title="Z-score")
+
+
+# save fig
+ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/heatmap_expr_agg.png",
+              width=8.9, height = 6, units="cm",res=500)
+
+draw(heatmap, padding = unit(c(2, 2, 2, 7), "mm"))
+dev.off()
+
+ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/heatmap_legend_agg.png",
+              width=10.66, height = 8.38, units="cm",res=500)
+draw(lgd)
+dev.off()
+
+
+
+
+# plot for rmd
+draw(heatmap, padding = unit(c(2, 2, 2, 7), "mm"))
+draw(lgd, x = unit(9.7, "cm"), y = unit(6, "cm"))
+
+
+```
+
+
+### Show expression of some genes along trajectory
+```{r, dpi=500, fig.width=4.6, fig.height=4}
+##############################################
+# SHOW TRAJECTORIES FOR SOME INTERESTING TFs #
+##############################################
+genes <- c("fru","D1","klu","Su(var)205")
+
+plot_df <- lapply(genes, function(g){
+  tmp <- smoothers_data[[g]]$df_curves$Lineage4 %>% 
+    bind_rows() %>% 
+    mutate(gene=g) %>% 
+    mutate(perturbation=rep(c("Control", "Notch-knockout"),each=150)) # we know first 150 are ctrl and next are notch. Is hardcoded... also possible to extract based on information in the lineage string but more difficult
+}) %>% bind_rows() %>% 
+  mutate(gene=factor(gene,levels=genes))
+
+trajectory_plots <- ggplot(plot_df, aes(x=time,y=log1p(gene_count),color=perturbation))+
+  geom_line(linewidth=1)+
+  theme_Publication(base_size = 14)+
+  labs(color="Condition")+
+  guides(color=guide_legend(nrow=2,byrow=TRUE))+
+  xlab("Pseudotime")+ 
+  ylab("Expression\n(logcounts)")+
+  scale_color_manual(values=c(color_mapping[1],color_mapping[3]))+
+  facet_wrap(~gene, scales = "free_y") +
+  ggtitle("Lineage: ISC -> EEP -> EE")
+  
+
+
+  # save fig
+ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/trajectory_expr_agg.png",
+              width=5.34, height = 5.38,units="cm",res=500, scaling = 0.5)
+trajectory_plots
+dev.off()
+  
+trajectory_plots
+```
+
+```{r, eval=F}
+rmarkdown::render("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/pseudotime_fig3.Rmd", 
+                  output_dir = "/g/huber/users/hirschmueller/DECODE/MasterThesis/html")
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
