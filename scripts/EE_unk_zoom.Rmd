@@ -249,8 +249,8 @@ pca_ee_subtypes_ctrl <- DimPlot(ee_subtypes_ctrl,
 
 ## Combine the plots
 ```{r}
-combined_plot <-wrap_plots(notch_umap,plot_spacer(),notch_zoom, plot_spacer(),pca_ee_subtypes,
-                           ctrl_umap,plot_spacer(),ctrl_zoom, plot_spacer(),pca_ee_subtypes_ctrl,
+combined_plot <-wrap_plots(ctrl_umap,plot_spacer(),ctrl_zoom, plot_spacer(),pca_ee_subtypes_ctrl,
+                           notch_umap,plot_spacer(),notch_zoom, plot_spacer(),pca_ee_subtypes,
            nrow = 2,ncol = 5) +
   plot_layout(widths = c(1,0.07,1,0.07,1,1,0.07,1,0.07,1))+
   plot_annotation(tag_levels = "A") & 
