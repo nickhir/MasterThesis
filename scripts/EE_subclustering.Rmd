@@ -1,0 +1,307 @@
+---
+title: "EE Subclustering"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center")
+```
+
+
+### Introduction
+EE subclustering. Complex Heatmaps are a bit odd to combine in patchworks. Thus we generate the elements here and combine them manually later...
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(scran)
+library(scales)
+library(patchwork)
+library(parallel)
+library(Seurat)
+library(ComplexHeatmap)
+library(circlize)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+```{r}
+# easy function to plot heatmap for set of genes. each column is one cell
+marker_heatmap <- function(seurat, markers, celltype, group.by, cap_value=NULL){
+  # plot a heatmap, where each column is one cell! The cells are grouped and split according to the cluster they are from 
+  
+  ordered_index <- order(seurat@meta.data[[group.by]])
+  c_split <- sort(seurat@meta.data[[group.by]])
+  
+  if (!all(markers %in% rownames(seurat@assays$RNA))){
+    mising_genes <- paste(markers[!markers %in% rownames(seurat@assays$RNA)], sep=", ")
+    celltype <- celltype[markers %in% rownames(seurat@assays$RNA)]
+    markers <- markers[markers %in% rownames(seurat@assays$RNA)]
+    print(str_interp("Not all markers occur in the data matrix of the seurat object. Specifically, ${mising_genes} are missing. Removing it and continuing"))
+  }
+  
+  # get counts and perform gene wise scaling
+  cnts_scaled <- as.matrix(seurat@assays$RNA[markers, ordered_index]) %>% 
+    t() %>% 
+    scale() %>% 
+    t()
+  
+  
+  
+  if(!is.null(cap_value)){
+    message(str_interp("Zscores > |${cap_value}| are set to ${cap_value} (or -${cap_value})"))
+    changed_values <- sum(cnts_scaled>cap_value) + sum(cnts_scaled < -cap_value)
+    cnts_scaled[cnts_scaled>cap_value] = cap_value 
+    cnts_scaled[cnts_scaled < -cap_value] = -cap_value 
+    message(str_interp("This was the case for ${changed_values} values"))
+    col_fun = colorRamp2(c(-cap_value, 0, cap_value), c("blue", "white", "red"))
+    
+  } else {col_fun = colorRamp2(breaks=c(min(cnts_scaled, na.rm=T), mean(cnts_scaled, na.rm=T), max(cnts_scaled, na.rm=T)),
+                     colors=c("blue", "white", "red"))}
+
+  p <- Heatmap(cnts_scaled,
+               cluster_rows = F, 
+               cluster_columns = F, 
+               show_row_names = T, 
+               show_column_names = F,
+               column_split = c_split,
+               row_split = celltype,
+               show_heatmap_legend = F,
+               name="Z-score",
+               col=col_fun,
+               row_gap = unit(1, "mm"),
+               column_gap = unit(1, "mm"),
+               border_gp = grid::gpar(col = "black", lwd = 0.5),
+               column_title_gp = grid::gpar(fontsize = 7),
+               column_title_rot = 90,
+               row_names_gp = grid::gpar(fontsize = 7),
+               row_title_gp = grid::gpar(fontsize = 7),
+               row_title_rot = 0,
+               use_raster = F,
+               heatmap_legend_param = list(at = c(-cap_value, 0, cap_value)))
+  return(p)
+}
+
+```
+
+
+```{r}
+# load the data
+ee_ctrl <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/subclustering/EE/ee_ctrl_integrated.qs")
+ee_notch <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/subclustering/EE/ee_notch_integrated.qs")
+
+```
+
+### UMAPs
+```{r, fig.height=17, fig.width=9, dpi=300}
+# define a color palette for our data
+color_palette <- c("#009E73", "#56B4E9", "#E69F00",  "#D55E00",  "#8EBD59", "#EB6864")
+
+
+
+# we have to turn the celltype into a factor with the same ordering for both ctrl and notch.
+ee_ctrl$EE_subtype <- factor(ee_ctrl$EE_subtype, 
+                                          levels = c("Tk-EE", "unk-EE", "classIII-EE", "EEP", "AstC-EE", "aEC-EE"))
+
+ee_notch$EE_subtype <- factor(ee_notch$EE_subtype, 
+                                          levels = c("Tk-EE", "unk-EE", "classIII-EE", "EEP", "AstC-EE", "aEC-EE"))
+
+#############
+# PLOT CTRL #
+#############
+ctrl_umap <- DimPlot(ee_ctrl,
+        group.by = "EE_subtype",
+        label=T,
+        repel = T,
+        label.size = 3.9,
+        pt.size = 0.5,
+        raster = F,
+        label.box = T)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"),
+        plot.title = element_blank())+
+  scale_color_manual(values = color_palette[1:n_distinct(ee_ctrl$EE_subtype)])+
+  scale_fill_manual(values = color_palette[1:n_distinct(ee_ctrl$EE_subtype)])+
+  scale_x_reverse()
+
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/ctrl_EE.png", width = 8.71, height = 8.08,
+              res=800, units = "cm", scaling = 0.7)
+ctrl_umap
+dev.off()
+
+
+
+
+##############
+# PLOT NOTCH #
+##############
+notch_umap <- DimPlot(ee_notch,
+        group.by = "EE_subtype",
+        label=T,
+        repel = T,
+        label.size = 3.9,
+        pt.size = 0.5,
+        raster = F,
+        label.box = T)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"),
+        plot.title = element_blank())+
+  scale_color_manual(values = color_palette[1:n_distinct(ee_notch$EE_subtype)])+
+  scale_fill_manual(values = color_palette[1:n_distinct(ee_notch$EE_subtype)])
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/notch_EE.png", width = 8.71, height = 8.08,
+              res=800, units = "cm", scaling = 0.7)
+notch_umap
+dev.off()
+
+
+###############
+# PLOT LEGEND #
+###############
+ee_ctrl$legend_title <- case_when(
+  ee_ctrl$EE_subtype == "EEP" ~ "EEP ≙ enteroendocrine progenitors",
+  ee_ctrl$EE_subtype == "unk-EE" ~ "unk-EE ≙ unkown enteroendocrines",
+  ee_ctrl$EE_subtype == "aEC-EE" ~ "aEC-EE ≙ anterior enterocytes\n                enteroendocrines",
+  ee_ctrl$EE_subtype == "classIII-EE" ~ "classIII-EE ≙ classIII enteroendocrines",
+  ee_ctrl$EE_subtype == "AstC-EE" ~ "AstC-EE ≙ Allatostatin-C enteroendocrines",
+  ee_ctrl$EE_subtype == "Tk-EE" ~ "Tk-EE ≙ Tachykinin enteroendocrines",
+)
+
+ee_ctrl$legend_title <- factor(ee_ctrl$legend_title, 
+                               levels = c("Tk-EE ≙ Tachykinin enteroendocrines",
+                                          "unk-EE ≙ unkown enteroendocrines",
+                                          "classIII-EE ≙ classIII enteroendocrines",
+                                          "EEP ≙ enteroendocrine progenitors",
+                                          "AstC-EE ≙ Allatostatin-C enteroendocrines",
+                                          "aEC-EE ≙ anterior enterocytes\n                enteroendocrines"))
+
+lgd_dimplot <- DimPlot(ee_ctrl,
+        group.by = "legend_title")+
+  scale_color_manual(values = color_palette[1:n_distinct(ee_ctrl$EE_subtype)]) +
+  guides(color = guide_legend(byrow = TRUE, override.aes = list(size=2.5))) +
+  theme(legend.spacing.y = unit(5, "mm"))
+lgd_dimplot <- cowplot::get_legend(lgd_dimplot) %>% ggplotify::as.ggplot()
+lgd_dimplot
+
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/legend_EE.png", width = 8.71, height =9.401528,
+              res=1000, units = "cm", scaling = 0.7)
+lgd_dimplot
+dev.off()
+
+
+
+
+
+```
+
+
+### Heatmaps
+```{r}
+#############
+# PLOT CTRL #
+#############
+ee_ctrl$EE_subtype <- factor(ee_ctrl$EE_subtype , 
+                             levels = ee_ctrl$EE_subtype %>% table() %>% sort(decreasing = T) %>% names())
+
+
+# based on literature and flygut atlas
+marker_table <- data.frame(gene=c("Tk", "Dh31", "NPF",
+                                  "AstA", "AstC","CCHa1", 
+                                  "CCHa2", "Orcokinin",
+                                  "esg", "kay", "hdc",
+                                  "alphaTry", "epsilonTry"),
+                           celltype=c("gut hormones", "gut hormones", "gut hormones", 
+                                      "gut hormones", "gut hormones", "gut hormones", 
+                                      "gut hormones", "gut hormones", 
+                                      "stem-cell marker", "stem-cell marker", "stem-cell marker", 
+                                      "aEC marker", "aEC marker"))
+
+marker_table$celltype <- factor(marker_table$celltype, levels=unique(marker_table$celltype))
+ht_opt(TITLE_PADDING=unit(1,"mm"))
+
+# draw heatmap
+heatmap_ctrl<-marker_heatmap(seurat = ee_ctrl,
+               markers = marker_table$gene,
+               celltype = marker_table$celltype,
+               group.by = "EE_subtype",
+               cap_value = 2)
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/heatmap_ee_ctrl.png", width = 6.2, height = 4.3,
+              res=800, units = "cm", scaling = 0.5)
+draw(heatmap_ctrl, padding = unit(c(2, 2,4, 2), "mm"), 
+     row_title = "Celltype marker", row_title_gp = grid::gpar(fontsize = 10),
+     column_title = "Assigned celltype label\n\n", column_title_gp = grid::gpar(fontsize = 10))
+
+dev.off()
+
+# draw legend
+lgd <- Legend(at = c(-2, -1, 0, 1, 2), col_fun=colorRamp2(c(-2, 0, 2), c("blue", "white", "red")), title="Z-score",
+               direction = "horizontal", legend_width = unit(30,"mm"), title_position = "topcenter")
+
+ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/heatmap_celltype_legend_agg.png",
+              width=10.66, height = 8.38, units="cm",res=800)
+draw(lgd)
+dev.off()
+
+
+
+##############
+# PLOT NOTCH #
+##############
+ee_notch$EE_subtype <- factor(ee_notch$EE_subtype, 
+                              levels = ee_notch$EE_subtype %>% table() %>% sort(decreasing = T) %>% names())
+
+# draw heatmap
+heatmap_notch<-marker_heatmap(seurat = ee_notch,
+               markers = marker_table$gene,
+               celltype = marker_table$celltype,
+               group.by = "EE_subtype",
+               cap_value = 2)
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/heatmap_ee_notch.png", width = 6.2, height = 4.3,
+              res=800, units = "cm", scaling = 0.5)
+draw(heatmap_notch, padding = unit(c(10, 2,4, 2), "mm"), 
+     row_title = "Celltype marker", row_title_gp = grid::gpar(fontsize = 10),
+     column_title = "Assigned celltype label\n\n", column_title_gp = grid::gpar(fontsize = 10))
+dev.off()
+
+```
+
+
+
+```{r}
+rmarkdown::render("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/EE_subclustering.Rmd", 
+                  output_dir = "/g/huber/users/hirschmueller/DECODE/MasterThesis/html")
+```
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
