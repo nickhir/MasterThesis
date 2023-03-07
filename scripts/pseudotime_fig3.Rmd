@@ -26,6 +26,7 @@ library(SingleCellExperiment)
 library(ComplexHeatmap)
 library(circlize)
 
+
 # load the plot theme
 source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
 ```

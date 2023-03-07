@@ -154,8 +154,14 @@ deseq_res_ee <- results(result) %>%
 ```
 
 ```{r}
+
+# create this to give some space for the asterics later. 
+dummy= data.frame(celltype = c("AstC-EE", "EEP", "classIII-EE","Tk-EE"), n_cells=c(295,260,190,280), Condition="Control",
+                    variable = "celltype", stringsAsFactors=FALSE, replicate="Control Replicate 1")
+
+
 # visualize ee change
-ee_annotation_plot<-counts(dds, norm=T) %>% 
+ee_annotation_plot <- counts(dds, norm=T) %>% 
   data.frame() %>% 
   rownames_to_column("celltype") %>% 
   pivot_longer(-celltype,names_to = "replicate", values_to = "n_cells") %>% 
@@ -174,7 +180,12 @@ ee_annotation_plot<-counts(dds, norm=T) %>%
   theme(legend.title = element_blank())+
   scale_color_manual(values=color_mapping)+
   guides(color=guide_legend(nrow=2,byrow=F))+
-  ggtitle("Enteroendocrine cell\npopulations")
+  ggtitle("Enteroendocrine cell\npopulations")+
+  geom_blank(data=dummy)
+
+ee_annotation_plot
+
+
 
 
 ```

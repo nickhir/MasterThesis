@@ -1,0 +1,194 @@
+---
+title: "Pseudotime analysis"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+
+### Introduction
+Show output of the cell cycle scoring. 
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F)
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(Seurat)
+library(patchwork)
+library(tradeSeq)
+library(slingshot)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+
+```{r}
+# load seurat data
+seurat <- qs::qread(file="/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/integration_notch_ctrl/ctrl_notch_reference_integration.qs")
+seurat@meta.data$celltype_manual <- ifelse(seurat$celltype_manual == "HSP-EB", "EB",seurat$celltype_manual)
+
+# remove celltypes where we are unsure of their origin or which would clutter the visualization. 
+celltypes_remove <- c("MT","unk","unk2", "R3")
+seurat_subset <- seurat[,!seurat$celltype_manual %in% celltypes_remove]
+
+# load subtypes of ees
+ee_population_info_notch <- data.table::fread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/subclustering/EE/mdata_ee_classification.tsv",
+                                        sep="\t",data.table = F)
+
+ee_population_info_ctrl <- data.table::fread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/subclustering/EE/mdata_ee_classification.tsv",
+                                        sep="\t",data.table = F)
+ee_population_info <- rbind(ee_population_info_ctrl, ee_population_info_notch)
+
+seurat_subset@meta.data$Barcode_unique <- rownames(seurat_subset@meta.data)
+
+seurat_subset@meta.data <- seurat_subset@meta.data %>% 
+  left_join(.,ee_population_info, by=c("Barcode_unique"))
+rownames(seurat_subset@meta.data) <- seurat_subset$Barcode_unique
+
+seurat_subset@meta.data$tmp_celltype <- case_when(
+  seurat_subset$celltype_manual == "daEC" ~ "dEC",
+  seurat_subset$EE_subtype == "EEP" ~ "EEP",
+  T ~ seurat_subset$celltype_manual
+)
+
+# just to make visually more pleasing (diff from left to right)
+seurat_subset[["pca_mod"]] <- CreateDimReducObject(
+  embeddings = Embeddings(seurat_subset,reduction = "pca")*-1, 
+  key = "PCAmod_",
+  assay = "integrated")
+
+
+# load slingshot results
+ss_EEP_no_end_ISC <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/ss_EEP_no_end_ISC.qs")
+sshot <- SlingshotDataSet(ss_EEP_no_end_ISC)
+
+# load transcription factor list (downloaded from flymine)
+tf_list <- data.table::fread("/g/huber/users/hirschmueller/DECODE/raw_data/TF_list/flymine_results_2023-01-11T00-54-01.tsv", header = F, data.table = F)
+
+# We used tradeseq to generate a dataframe which we can use to quickly plot pseudotimes. 
+smoothers_data <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/plotSmoothers_data.qs")
+
+# fitted GAM from tradeseq
+gam_fit_7 <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/GAM_7.qs")
+
+# results of tradeSeq analysis
+assoc_results_split <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/trajectory_inference_notch_ctrl/assoc_results_7.qs")
+```
+
+```{r}
+plot_pseudotime <- function(gene, extracted_lineages_object, sshot_dataset,
+                            plot_points=T){
+  color_mapping <- c("#6baed6", "#fb6a4a")
+  
+  
+  # create this dataframe. its faster to create names like this than to use sapply within mutate.
+  name_mapping = data.frame(trajectory=c(1,2,3,4),
+                            trajectory_name=c(paste(sshot_dataset@lineages[[1]],collapse = " -> "),
+                                              paste(sshot_dataset@lineages[[2]],collapse = " -> "),
+                                              paste(sshot_dataset@lineages[[3]],collapse = " -> "),
+                                              paste(sshot_dataset@lineages[[4]],collapse = " -> ")))
+  
+  
+  curves_df <- lapply(extracted_lineages_object[[gene]]$df_curves, function(ii){
+    x<-lapply(ii, function(kk){
+      return(kk)
+    }) %>% bind_rows()
+    return(x)
+  }) %>% 
+    bind_rows()%>% 
+    mutate(trajectory = str_extract_all(.$lineage, pattern ="\\d") %>% as.integer()) %>% 
+    left_join(.,name_mapping,by="trajectory") %>% 
+    mutate(Condition = ifelse(grepl("ctrl",lineage),"Control","Notch-knockout"))
+  
+  points_df <- extracted_lineages_object[[gene]]$df_points %>% 
+    mutate(trajectory = str_extract_all(.$lineage, pattern ="\\d") %>% as.integer()) %>% 
+    left_join(.,name_mapping,by="trajectory") %>% 
+    mutate(Condition = ifelse(grepl("ctrl",lineage),"Control","Notch-knockout"))
+  
+  # do the actual plot
+  p <- ggplot(points_df, aes(x=time,y=log1p(gene_count),color=Condition))+
+    facet_wrap(~trajectory_name)+
+    theme_Publication()
+  
+  if (plot_points){
+    p <- p + geom_point(size=0.1,alpha=0.7)
+  }
+  
+  p <- p + 
+    geom_line(data=curves_df, linewidth=0.9) + 
+    scale_color_manual(values=color_mapping) +
+    xlab("Pseudotime")+ 
+    ylab("Expression\n(logcounts)")+
+    ggtitle(gene)
+
+  return(p)
+}
+```
+
+
+
+```{r}
+Dl_pseudotime <- plot_pseudotime("Dl",
+                                  extracted_lineages_object = smoothers_data,
+                                  sshot_dataset = sshot,
+                                  plot_points=F)
+
+hdc_pseudotime <- plot_pseudotime("hdc",
+                                  extracted_lineages_object = smoothers_data,
+                                  sshot_dataset = sshot,
+                                  plot_points=F)
+
+aEC_pseudotime <- plot_pseudotime("alphaTry",
+                                  extracted_lineages_object = smoothers_data,
+                                  sshot_dataset = sshot,
+                                  plot_points=F)
+
+copper_pseudotime <- plot_pseudotime("Vha100-4",
+                                     extracted_lineages_object = smoothers_data,
+                                     sshot_dataset = sshot,
+                                     plot_points=F)
+
+pEC_pseudotime <- plot_pseudotime("lambdaTry",
+                                  extracted_lineages_object = smoothers_data,
+                                  sshot_dataset = sshot,
+                                  plot_points=F)
+
+ee_pseudotime <- plot_pseudotime("pros",
+                                 extracted_lineages_object = smoothers_data,
+                                 sshot_dataset = sshot,
+                                 plot_points=F)
+```
+
+```{r}
+combined_plot <- wrap_plots(Dl_pseudotime, hdc_pseudotime,
+                            aEC_pseudotime, copper_pseudotime,
+                            pEC_pseudotime, ee_pseudotime, ncol = 2)+
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 15, face="bold"),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        strip.text.x = element_text(size = 7.5),
+        plot.title = element_text(size=11,face="bold",hjust=0.5),
+        axis.title = element_text(size=9,face="bold"),
+        plot.margin = unit(c(2,2,2,2),"mm"))
+
+
+ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/expression_psudotime.png",
+              width=11.5, height = 13.5, units="cm",res=800, scaling = 0.5)
+combined_plot
+dev.off()
+
+```
+
+
+```{r}
+sessionInfo()
+```
+

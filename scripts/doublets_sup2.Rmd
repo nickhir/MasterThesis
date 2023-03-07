@@ -27,14 +27,24 @@ source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
 
 ```{r}
 # load data
-ctrl_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/DoubletDetection/seurat_integrated_doublet_label.qs")
-ctrl_integrated$celltype_manual <- ifelse(ctrl_integrated$celltype_manual=="HSP-EB","EB",ctrl_integrated$celltype_manual)
+ctrl_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/integration/seurat_integration.qs")
+ctrl_integrated$celltype_manual <- ifelse(ctrl_integrated$celltype_manual == "HSP-EB", "EB", ctrl_integrated$celltype_manual)
+ctrl_integrated$celltype_manual <- ifelse(ctrl_integrated$celltype_manual == "R3", "mEC", ctrl_integrated$celltype_manual)
 
 ctrl_integrated_singlet <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/DoubletDetection/seurat_integrated_only_singlets.qs")
-ctrl_integrated_singlet$celltype_manual <- ifelse(ctrl_integrated_singlet$celltype_manual=="HSP-EB","EB",ctrl_integrated_singlet$celltype_manual)
+ctrl_integrated_singlet$celltype_manual <- ifelse(ctrl_integrated_singlet$celltype_manual == "HSP-EB", "EB", ctrl_integrated_singlet$celltype_manual)
+ctrl_integrated_singlet$celltype_manual <- ifelse(ctrl_integrated_singlet$celltype_manual == "R3", "mEC", ctrl_integrated_singlet$celltype_manual)
 ```
 
 ```{r}
+# define a color palette for our data
+color_palette <- c("#009E73", "#56B4E9", "#E69F00", "#C7B900", "#D55E00", "#CC79A7", "#8EBD59", "#663399","#999999", "#EB6864", "#709DAD")
+
+# we have to turn the celltype into a factor with the same ordering for both ctrl and notch.
+ctrl_integrated$celltype_manual <- factor(ctrl_integrated$celltype_manual, 
+                                          levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk","MT", "dEC","mEC"))
+
+
 #######################
 # CELLTYPE ANNOTATION #
 ####################### 
@@ -50,13 +60,17 @@ p_celltype <- DimPlot(ctrl_integrated,
   xlab("UMAP 1")+
   ylab("UMAP 2")+
   theme(plot.title = element_text(size=11,face="bold",hjust = 0.5),
-        legend.position = "none")
+        legend.position = "none")+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  scale_y_reverse()
 
 
 
 #################
 # DoubletFinder #
 #################
+ctrl_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/DoubletDetection/seurat_integrated_doublet_label.qs")
 doublet_labels <- rownames(ctrl_integrated[, ctrl_integrated$doublet_label=="Doublet"]@meta.data)
 p_doubletFinder<-DimPlot(ctrl_integrated,
                          pt.size = 0.007,
@@ -68,7 +82,8 @@ p_doubletFinder<-DimPlot(ctrl_integrated,
   ggtitle("DoubletFinder")+
   xlab("UMAP 1")+
   ylab("UMAP 2")+
-  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))+
+  scale_y_reverse()
 
 ############
 # Scrublet #
@@ -84,11 +99,14 @@ p_scrublet<-DimPlot(ctrl_integrated,
   ggtitle("Scrublet")+
   xlab("UMAP 1")+
   ylab("UMAP 2")+
-  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))+
+  scale_y_reverse()
 
 ####################
 # DOUBLETS REMOVED #
 ####################
+ctrl_integrated_singlet$celltype_manual <- factor(ctrl_integrated_singlet$celltype_manual, 
+                                          levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk","MT", "dEC","mEC"))
 p_singlets<-DimPlot(ctrl_integrated_singlet,
                     reduction = "umap", 
                     group.by = "celltype_manual", 
@@ -101,9 +119,10 @@ p_singlets<-DimPlot(ctrl_integrated_singlet,
   NoLegend()+
   xlab("UMAP 1")+
   ylab("UMAP 2")+
-  scale_y_reverse() + # we do this so the orientation is similar to the "original". Doesnt actually change any data and is only used for visualization
   ggtitle("Celltype Annotation\nw/o Doublets")+
-  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))+
+  scale_color_manual(values=color_palette) +
+  scale_fill_manual(values=color_palette)
 ```
 
 
@@ -112,10 +131,11 @@ combined <- wrap_plots(p_celltype, p_doubletFinder, p_scrublet, p_singlets, nrow
   plot_annotation(tag_levels = "A") & 
   theme(plot.tag = element_text(size = 15, face="bold"))
 
-ggsave("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/doublets.png",
-       dpi=500, width = 10, height = 3.5, plot=combined)
-
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/doublets.png", width = 10, height = 3.5, res=800, units = "in", scaling = 0.88)
 combined
+dev.off()
+
+
 ```
 
 

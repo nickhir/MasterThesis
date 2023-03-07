@@ -1,5 +1,5 @@
 ---
-title: "DECODE Cell Cycle"
+title: "Cell Cycle analysis"
 author: "Nick Hirschmüller"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: html_document
@@ -31,13 +31,21 @@ source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
 # load data
 ctrl <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/CellCycleScoring_ctrl/ctrl_integrated_doublet_CellCycle.qs")
 
-ctrl$celltype_manual <- ifelse(ctrl$celltype_manual=="HSP-EB","EB",ctrl$celltype_manual)
-
+ctrl$celltype_manual <- ifelse(ctrl$celltype_manual == "HSP-EB", "EB", ctrl$celltype_manual)
+ctrl$celltype_manual <- ifelse(ctrl$celltype_manual == "R3", "mEC", ctrl$celltype_manual)
 ```
 
 
 ### Generate Plots
 ```{r}
+# define a color palette for our data
+color_palette <- c("#009E73", "#56B4E9", "#E69F00", "#C7B900", "#D55E00", "#CC79A7", "#8EBD59", "#663399","#999999", "#EB6864", "#709DAD")
+
+# we have to turn the celltype into a factor with the same ordering for both ctrl and notch.
+ctrl$celltype_manual <- factor(ctrl$celltype_manual, 
+                                          levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk","MT", "dEC","mEC"))
+
+
 ctrl$Phase <- factor(ctrl$Phase, levels = c("G1","S","G2M"))
 p_annotation <- DimPlot(ctrl,
                         pt.size = 0.007,
@@ -51,9 +59,15 @@ p_annotation <- DimPlot(ctrl,
   xlab("UMAP 1")+
   ylab("UMAP 2")+
   theme(plot.title = element_text(size=11,face="bold",hjust = 0.5),
-        legend.position = "none")
+        legend.position = "none") +
+  scale_color_manual(values=color_palette) +
+  scale_fill_manual(values=color_palette) +
+  scale_y_reverse()
 
 
+
+
+new_colors <- c("#fc8d59", "#74C281", "#91bfdb")
 p_cellcycle <- DimPlot(ctrl,
                        pt.size = 0.007,
                        group.by = "Phase",
@@ -63,7 +77,9 @@ p_cellcycle <- DimPlot(ctrl,
   theme_UMAP()+
   ggtitle("Cell cycle Phase")+
   labs(color="Phase")+
-  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))
+  theme(plot.title = element_text(size=11,face="bold",hjust = 0.5))+
+  scale_color_manual(values=new_colors)+
+  scale_y_reverse()
 
 
 
@@ -83,7 +99,7 @@ phase_distribution <- ctrl@meta.data %>%
 p_cellcycle_distribution <- ggplot(phase_distribution, aes(x=Phase,y=fraction, fill=Phase))+
   geom_col()+
   facet_wrap(~celltype_manual) +
-  scale_fill_Publication()+
+  scale_fill_manual(values=new_colors)+
   theme_Publication() %+%
   theme(legend.position = "none")+
   ylab("Fraction of cells")+
@@ -101,8 +117,12 @@ combined <- wrap_plots(p_annotation, p_cellcycle, p_cellcycle_distribution, nrow
   theme(plot.tag = element_text(size = 15, face="bold"))
 
 
-ggsave("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/CellCycle.png",
-       dpi=500, width = 10, height = 4, plot=combined)
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/CellCycle.png", width = 10, height = 4, res=800, units = "in", scaling = 0.88)
+combined
+dev.off()
+
+
 
 combined
 ```
