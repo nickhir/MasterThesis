@@ -132,7 +132,6 @@ plot_pseudotime <- function(gene, extracted_lineages_object, sshot_dataset,
 ```
 
 
-
 ```{r}
 Dl_pseudotime <- plot_pseudotime("Dl",
                                   extracted_lineages_object = smoothers_data,

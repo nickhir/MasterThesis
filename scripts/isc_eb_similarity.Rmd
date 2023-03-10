@@ -1,0 +1,268 @@
+---
+title: "Show ISC and EB similarity"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center")
+```
+
+### Introduction
+Show similarities between ISCs and EBs and also that they both express _esg_ and therefore experience the _Notch_ perturbation.
+
+```{r}
+# load libraries
+library(tidyverse)
+library(patchwork)
+library(Seurat)
+library(RColorBrewer)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+```{r}
+# load the data
+notch_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/integration/seurat_integration.qs")
+
+notch_integrated$celltype_manual <- ifelse(notch_integrated$celltype_manual == "unk2", "unk", notch_integrated$celltype_manual)
+
+# also some MT cells are labeled as pEC. This is because for the resolution that we chose, they were aggregated as one cluster and in that cluster pEC markers dominate. 
+# however the cells belonging to MT express specificall Smvt and ct (and are also predicted to be MT using the flygut atlas).
+MT_cells <-c("TX22_N_ACGTCCTAGTAAACAC-1", "TX22_N_ACTTATCGTAAGCTCT-1", "TX22_N_AGGCCACAGCTGAGTG-1",
+         "TX22_N_AGTGTTGCACAATGAA-1", "TX22_N_ATCACTTTCAGTGTTG-1", "TX22_N_ATCGTCCAGGGATCGT-1",
+         "TX22_N_ATTCAGGCACTGGATT-1", "TX22_N_CAGCGTGCAACGTATC-1", "TX22_N_CAGTGCGCAAACGAGC-1",
+         "TX22_N_CAGTTCCTCCGTAATG-1", "TX22_N_CATCCCATCATGCAGT-1", "TX22_N_CATGCCTAGCGTTCCG-1",
+         "TX22_N_CCGGTAGTCAAGGACG-1", "TX22_N_CTCAAGAAGAAACTCA-1", "TX22_N_GCCATTCGTACCGGAA-1",
+         "TX22_N_GCCCGAACATAAGATG-1", "TX22_N_GGTCACGCAGCGATTT-1", "TX22_N_GGTGAAGGTACTGCCG-1",
+         "TX22_N_GTACAGTGTAGGTAGC-1", "TX22_N_TAAGCCAGTGTCCATA-1", "TX22_N_TACCCGTGTTGGGACA-1",
+         "TX22_N_TCCACGTAGTGCAACG-1", "TX22_N_TGGATCATCGGTAGAG-1", "TX22_N_TGTCCACAGGTACCTT-1",
+         "TX22_N_TGTCCCAAGCCATTGT-1", "TX22_N_TTGTGTTGTAGCACGA-1", "TX22_N_TTTCCTCAGGACAACC-1",
+         "TX23_N_AACCTTTGTGTTTGCA-1", "TX23_N_ACACGCGCAAGTGTCT-1", "TX23_N_ATCGATGGTTCGCGTG-1",
+         "TX23_N_CATGAGTGTGCAATAA-1", "TX23_N_CGTTGGGCAGACGCTC-1", "TX23_N_CTCCATGCACACCTGG-1",
+         "TX23_N_GCTTGGGAGAATTTGG-1", "TX23_N_GGAGGTAAGACATCAA-1", "TX23_N_GTCTAGAGTTGCCATA-1",
+         "TX23_N_TACAGGTAGACCACGA-1", "TX23_N_TATCCTAGTATGCTAC-1", "TX23_N_TCACTATAGTCCCAAT-1",
+         "TX23_N_TTGAACGGTGCACATT-1", "TX23_N_TTGGATGAGCATCCCG-1")
+  
+notch_integrated$celltype_manual <- ifelse(rownames(notch_integrated@meta.data) %in% MT_cells,
+                                           "MT",
+                                           notch_integrated$celltype_manual)
+
+
+
+ctrl_integrated <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/integration/seurat_integration.qs")
+ctrl_integrated$celltype_manual <- ifelse(ctrl_integrated$celltype_manual == "HSP-EB", "EB", ctrl_integrated$celltype_manual)
+ctrl_integrated$celltype_manual <- ifelse(ctrl_integrated$celltype_manual == "R3", "mEC", ctrl_integrated$celltype_manual)
+```
+
+
+## generate overview pca
+```{r}
+# define a color palette for our data
+color_palette <- c("#009E73", "#56B4E9", "#E69F00", "#C7B900", "#D55E00", "#CC79A7", "#8EBD59", "#663399","#999999", "#EB6864", "#709DAD")
+color_palette_alpha <- alpha(color_palette,0.4)
+
+# we have to turn the celltype into a factor with the same ordering for both ctrl and notch.
+ctrl_integrated$celltype_manual <- factor(ctrl_integrated$celltype_manual, 
+                                          levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk","MT", "dEC","mEC"))
+
+notch_integrated$celltype_manual <- factor(notch_integrated$celltype_manual, 
+                                          levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk", "MT"))
+
+#############
+# PLOT CTRL #
+#############
+ctrl_pca <- DimPlot(ctrl_integrated,
+        group.by = "celltype_manual",
+        label=T,
+        repel = T,
+        shuffle = T,
+        label.size = 3.7,
+        pt.size = 0.5,
+        raster = F,
+        label.box = T, reduction = "pca",cols=color_palette_alpha)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))+
+  scale_fill_manual(values=color_palette)+
+  xlab("PC 1")+
+  ylab("PC 2")+
+  scale_x_reverse() # purely for visualization, so they are aligned like the notch.
+
+
+
+##################
+# PLOT CTRL ZOOM #
+##################
+# only keep celltypes we will actually see in the zoom
+ctrl_zoom <- ctrl_integrated[,ctrl_integrated$celltype_manual %in% c("ISC","EB")]
+
+# to drive home the point, subsample EBs to only 2k cells
+eb_index <- which(ctrl_zoom$celltype_manual=="EB")
+isc_index <- which(ctrl_zoom$celltype_manual=="ISC")
+
+ctrl_zoom_subsampled <- ctrl_zoom[, c(isc_index, sample(eb_index,2000))]
+
+ctrl_zoom_plot <- DimPlot(ctrl_zoom_subsampled,
+        group.by = "celltype_manual",
+        label=T,
+        repel = T,
+        shuffle = T,
+        label.size = 3.7,
+        pt.size = 0.5,
+        raster = F,
+        label.box = T, reduction = "pca",cols=color_palette)+
+  coord_cartesian(xlim = c(12,5), ylim=c(-3,2)) +
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))+
+  scale_fill_manual(values=color_palette)+
+  xlab("PC 1")+
+  ylab("PC 2")
+
+#######################
+# SHOW ESG EXPRESSION #
+#######################
+
+feature_plot_ctrl<-FeaturePlot(ctrl_zoom_subsampled,
+        "esg",pt.size = 0.5,reduction = "pca")+
+  coord_cartesian(xlim = c(12,5), ylim=c(-3,2)) +
+  theme_UMAP() +
+  theme(legend.direction = "vertical",
+        legend.position = "right",
+        legend.text = element_text(size=10),
+        strip.text = element_text(face = "bold"),
+        plot.title = element_blank())+
+  scale_fill_manual(values=color_palette)+
+  xlab("PC 1")+
+  ylab("PC 2")+
+  scale_color_gradient(low="lightgrey",high = "darkred")
+
+vln_plot_ctrl<-VlnPlot(ctrl_zoom_subsampled,"esg",group.by = "celltype_manual",cols = color_palette,pt.size = 0)+
+  theme_Publication() %+%
+  theme(legend.position = "none",
+        plot.title = element_blank(),
+        axis.title = element_text(size=10))+
+  xlab("Celltype")
+
+
+
+
+##############
+# PLOT NOTCH #
+##############
+notch_pca <- DimPlot(notch_integrated,
+        group.by = "celltype_manual",
+        label=T,
+        repel = T,
+        shuffle = T,
+        label.size = 3.7,
+        pt.size = 0.5,
+        raster = F,
+        label.box = T, reduction = "pca",cols=color_palette_alpha)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"),
+        plot.title = element_blank())+
+  scale_fill_manual(values=color_palette)+
+  xlab("PC 1")+
+  ylab("PC 2")+
+  scale_x_reverse() + # purely for visualization, so they are aligned like the notch
+  scale_y_reverse()
+
+##################
+# PLOT notch ZOOM #
+##################
+# only keep celltypes we will actually see in the zoom
+notch_zoom <- notch_integrated[,notch_integrated$celltype_manual %in% c("ISC","EB")]
+
+# to drive home the point, subsample EBs to only 2k cells
+eb_index <- which(notch_zoom$celltype_manual=="EB")
+isc_index <- which(notch_zoom$celltype_manual=="ISC")
+
+notch_zoom_subsampled <- notch_zoom[, c(sample(isc_index,3000), eb_index)]
+
+notch_zoom_plot <- DimPlot(notch_zoom_subsampled,
+        group.by = "celltype_manual",
+        label=T,
+        repel = T,
+        shuffle = T,
+        label.size = 3.7,
+        pt.size = 0.5,
+        raster = F,
+        label.box = T, reduction = "pca",cols=color_palette)+
+  coord_cartesian(xlim = c(10,3), ylim=c(4,-1)) +
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"),
+        plot.title = element_blank())+
+  scale_fill_manual(values=color_palette)+
+  xlab("PC 1")+
+  ylab("PC 2")
+
+#######################
+# SHOW ESG EXPRESSION #
+#######################
+
+feature_plot_notch<-FeaturePlot(notch_zoom_subsampled,
+        "esg",pt.size = 0.5,reduction = "pca")+
+  coord_cartesian(xlim = c(10,3), ylim=c(4,-1)) +
+  theme_UMAP() +
+  theme(legend.direction = "vertical",
+        legend.position = "right",
+        legend.text = element_text(size=10),
+        strip.text = element_text(face = "bold"),
+        plot.title = element_blank())+
+  scale_fill_manual(values=color_palette)+
+  xlab("PC 1")+
+  ylab("PC 2")+
+  scale_color_gradient(low="lightgrey",high = "darkred")
+
+vln_plot_notch<-VlnPlot(notch_zoom_subsampled,"esg",group.by = "celltype_manual",cols = color_palette,pt.size = 0)+
+  theme_Publication() %+%
+  theme(legend.position = "none",
+        plot.title = element_blank(),
+        axis.title = element_text(size=10),
+        plot.margin = unit(c(25,2,2,2),"mm"))+
+  xlab("Celltype")
+```
+
+## Combine plots
+```{r}
+combined <- wrap_plots(ctrl_pca, ctrl_zoom_plot, plot_spacer(), feature_plot_ctrl, vln_plot_ctrl, 
+           notch_pca, notch_zoom_plot, plot_spacer(), feature_plot_notch, vln_plot_notch,
+           nrow = 2)+
+  plot_layout(widths = c(1,1,0.1,1,0.4)) &
+  theme(axis.title = element_text(size=10, face="bold"))
+
+
+ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/isc_eb_similarity.png",
+              width=16, height = 9, units="cm",res=800, scaling = 0.4)
+combined
+dev.off()
+
+
+
+```
+
+
+```{r}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

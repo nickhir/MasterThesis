@@ -92,7 +92,7 @@ phase_distribution <- ctrl@meta.data %>%
   mutate(fraction = n/n_total)%>% 
   mutate(Phase = factor(Phase, levels = c("G1", "S", "G2M"))) %>% 
   dplyr::filter(!celltype_manual %in% c("unk","MT")) %>% 
-  mutate(celltype_manual = factor(celltype_manual, levels = c("aEC","pEC","Copper","R3", "EE",
+  mutate(celltype_manual = factor(celltype_manual, levels = c("aEC","pEC","Copper","mEC", "EE",
                                                               "daEC", "dEC","EB", "ISC")))
 
 

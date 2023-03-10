@@ -1,0 +1,196 @@
+---
+title: "Differential gene expression"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+### Introduction
+Perform the differential gene expression for the ISC/EB population using the pseudobulk approach.
+
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F,fig.align = "center")
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(DESeq2)
+library(glmGamPoi)
+library(patchwork)
+library(Seurat)
+library(SingleCellExperiment)
+library(DGEvistools)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+```{r}
+seurat <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/integration_notch_ctrl/ctrl_notch_naive_integration.qs")
+
+# harmonize the celltype annotation a bit
+seurat$celltype_manual <- ifelse(seurat$celltype_manual=="HSP-EB",
+                                 "EB",
+                                 seurat$celltype_manual)
+seurat@meta.data$tmp_celltype <-case_when(
+  seurat$celltype_manual %in% c("EB","ISC") ~ "ISC/EB",
+  T ~ seurat$celltype_manual
+)
+
+# Create single cell experiment object
+sce <- SingleCellExperiment(assays = list(counts = seurat@assays$RNA@counts), 
+                            colData = seurat@meta.data)
+# do some filtering
+sce <- sce[rowSums(counts(sce)) > 75,]
+
+# remove irrelevant celltypes 
+sce <- sce[,sce$tmp_celltype =="ISC/EB"]
+
+# summarize expression
+reduced_sce <- pseudobulk(sce, 
+                          group_by = vars(orig.ident, tmp_celltype, perturbation),  
+                          n_cells = n())
+```
+
+
+```{r}
+isc_eb_subset <- reduced_sce[,grepl("ISC/EB",colnames(reduced_sce))]
+
+##########
+# DESeq2 # 
+##########
+
+dds_subset <- DESeqDataSetFromMatrix(countData = counts(isc_eb_subset),
+                              colData = colData(isc_eb_subset),
+                              design= ~ perturbation)
+dds_subset <- DESeq(dds_subset)
+res_deseq <- results(dds_subset)
+
+res_deseq <- res_deseq %>% 
+  data.frame() %>%  
+  rownames_to_column("name") %>% 
+  tibble() %>% 
+  dplyr::rename(logFC=log2FoldChange)
+```
+
+```{r}
+# volcano plot
+volc_plot <- res_deseq %>% 
+  dplyr::rename(log2FoldChange=logFC,
+                symbol=name) %>% 
+  volcano_plot(.,
+               xlim = c(-8,8),
+               title="ISC/EB Population",
+               annotate_by=c("sff", "E(spl)m6-BFM","sc", "N","E(spl)mgamma-HLH"),
+               annotation_size=4,
+               min_pval_cutoff  = 10e-13)+
+  scale_x_continuous(breaks = seq(-8, 8, by = 4))+
+  theme_Publication() %+%
+  theme(panel.grid = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.title = element_text(face="bold",size=11.5),
+        plot.margin = unit(c(2,10,2,2),"mm"))
+
+volc_plot
+
+FeaturePlot(seurat,"sff",split.by = "perturbation",order = T)
+FeaturePlot(seurat,"sc",split.by = "perturbation",order = T)
+# FeaturePlot(seurat,"Tengl3",split.by = "perturbation",order = T)
+# FeaturePlot(seurat,"N",split.by = "perturbation",order = T)
+# FeaturePlot(seurat,"E(spl)m6-BFM",split.by = "perturbation",order = T)
+```
+
+
+```{r}
+genes <- c("E(spl)malpha-BFM","E(spl)m6-BFM", 
+           "sff", "sc")
+plot_df <- lapply(genes, function(x){
+  plotCounts(dds_subset,gene = x, intgroup = c("tmp_celltype","perturbation"),
+                  normalized = T,
+                  returnData = T) %>% 
+    mutate(gene=x)
+}) %>% bind_rows() %>% 
+  rownames_to_column("id") %>% 
+  mutate(replicate = case_when(
+    grepl("TX22\\.", id) ~ "Control Replicate 1",
+    grepl("TX23\\.", id) ~ "Control Replicate 2",
+    grepl("TX22_N", id) ~ "Notch Replicate 1",
+    grepl("TX23_N", id) ~ "Notch Replicate 2",
+  )) %>% 
+  mutate(Condition=case_when(
+    perturbation=="ctrl" ~ "Control",
+    perturbation=="notch" ~ "Notch\nknockout"
+  )) %>% 
+  mutate(gene=factor(gene,levels=genes))
+
+boxplots <- plot_df %>% 
+  ggplot(., aes(Condition,count,color=replicate))+
+  geom_jitter(width = 0.14)+
+  facet_wrap(~gene, scales = "free_y") +
+  stat_summary(fun.y=mean, geom="crossbar", colour="red", width=0.08)+
+  theme_Publication() %+%
+  theme(legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        plot.margin = unit(c(2,10,2,2),"mm")) + 
+  scale_color_manual(values=color_mapping)+
+  guides(color=guide_legend(nrow=2,byrow=F))+
+  ylab("Normalized Expression")
+```
+
+```{r}
+# load GSEA results.
+gsea_res <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/pseudobulk/isc_eb/gsea_result.qs")
+
+
+kegg_gsea<-gsea_res@result %>% 
+  filter(p.adjust<0.05) %>% 
+  arrange(NES) %>% 
+  filter(grepl("KEGG_",ID)) %>% 
+  mutate(ID_short = c("Ribosome", "Mismatch Repair", "Base Excision Repair", "Homologous Recombination", "Nucleotide Excision Repair", "Cell Cycle", "Proteasome", "DNA Replication")) %>% 
+  mutate(ID_short = factor(ID_short, levels = ID_short)) 
+
+
+gsea_kegg_res <- ggplot(kegg_gsea, aes(x=NES, y=ID_short)) + 
+  geom_segment(aes(xend=0, yend = ID_short),size=1.2) +
+  geom_point(aes(color=p.adjust),size=5) +
+  scale_color_viridis_c(begin = 1,end=0,
+                        guide=guide_colorbar(reverse=F),
+                        limits=c(1e-6,0.02),
+                        breaks=c(1e-6,0.02),
+                        labels=c(expression('10'^-6),expression('0.02')))+
+  theme_Publication()%+%
+  theme(axis.text = element_text(size=11),
+        plot.title = element_text(face = "bold",
+                                         size = 14, hjust = 0.5),
+        axis.title = element_text(size=14,face="bold"),
+        legend.title = element_blank())+
+  ylab("Gene Set")+
+  xlab("Normalized Enrichment Score")+
+  ggtitle("KEGG pathways")
+
+gsea_kegg_res
+```
+
+```{r}
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/differential_expression.png", width = 16, height = 6, res=1000, units = "cm", scaling = 0.4)
+wrap_plots(volc_plot, gsea_kegg_res, boxplots, nrow=1) + 
+  plot_layout(widths = c(0.6,0.6,0.8)) &
+  theme(legend.text = element_text(size=12),
+        axis.text = element_text(size=12.5),
+        axis.title = element_text(size=14, face = "bold"),
+        plot.title = element_blank(),
+        strip.text = element_text(size=12),
+        legend.key.width = unit(3,"mm"))
+dev.off()
+
+```
+
+```{r}
+sessionInfo()
+```
+
