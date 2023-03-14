@@ -1,0 +1,164 @@
+---
+title: "Supplementary Figure 11 sff meso18E expression"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+---
+
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F,fig.align = "center")
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(Seurat)
+library(patchwork)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+```{r}
+seurat <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/integration_notch_ctrl/ctrl_notch_naive_integration.qs")
+
+seurat$celltype_manual <- ifelse(seurat$celltype_manual == "unk2", "unk", seurat$celltype_manual)
+MT_cells <-c("TX22_N_ACGTCCTAGTAAACAC-1", "TX22_N_ACTTATCGTAAGCTCT-1", "TX22_N_AGGCCACAGCTGAGTG-1",
+         "TX22_N_AGTGTTGCACAATGAA-1", "TX22_N_ATCACTTTCAGTGTTG-1", "TX22_N_ATCGTCCAGGGATCGT-1",
+         "TX22_N_ATTCAGGCACTGGATT-1", "TX22_N_CAGCGTGCAACGTATC-1", "TX22_N_CAGTGCGCAAACGAGC-1",
+         "TX22_N_CAGTTCCTCCGTAATG-1", "TX22_N_CATCCCATCATGCAGT-1", "TX22_N_CATGCCTAGCGTTCCG-1",
+         "TX22_N_CCGGTAGTCAAGGACG-1", "TX22_N_CTCAAGAAGAAACTCA-1", "TX22_N_GCCATTCGTACCGGAA-1",
+         "TX22_N_GCCCGAACATAAGATG-1", "TX22_N_GGTCACGCAGCGATTT-1", "TX22_N_GGTGAAGGTACTGCCG-1",
+         "TX22_N_GTACAGTGTAGGTAGC-1", "TX22_N_TAAGCCAGTGTCCATA-1", "TX22_N_TACCCGTGTTGGGACA-1",
+         "TX22_N_TCCACGTAGTGCAACG-1", "TX22_N_TGGATCATCGGTAGAG-1", "TX22_N_TGTCCACAGGTACCTT-1",
+         "TX22_N_TGTCCCAAGCCATTGT-1", "TX22_N_TTGTGTTGTAGCACGA-1", "TX22_N_TTTCCTCAGGACAACC-1",
+         "TX23_N_AACCTTTGTGTTTGCA-1", "TX23_N_ACACGCGCAAGTGTCT-1", "TX23_N_ATCGATGGTTCGCGTG-1",
+         "TX23_N_CATGAGTGTGCAATAA-1", "TX23_N_CGTTGGGCAGACGCTC-1", "TX23_N_CTCCATGCACACCTGG-1",
+         "TX23_N_GCTTGGGAGAATTTGG-1", "TX23_N_GGAGGTAAGACATCAA-1", "TX23_N_GTCTAGAGTTGCCATA-1",
+         "TX23_N_TACAGGTAGACCACGA-1", "TX23_N_TATCCTAGTATGCTAC-1", "TX23_N_TCACTATAGTCCCAAT-1",
+         "TX23_N_TTGAACGGTGCACATT-1", "TX23_N_TTGGATGAGCATCCCG-1")
+  
+seurat$celltype_manual <- ifelse(rownames(seurat@meta.data) %in% MT_cells,
+                                           "MT",
+                                           seurat$celltype_manual)
+seurat$celltype_manual <- ifelse(seurat$celltype_manual == "HSP-EB", "EB", seurat$celltype_manual)
+seurat$celltype_manual <- ifelse(seurat$celltype_manual == "R3", "mEC", seurat$celltype_manual)
+seurat$perturbation <- ifelse(seurat$perturbation == "ctrl", "Control\nCondition",
+                              "Notch knockout\nCondition")
+
+```
+
+
+```{r}
+color_palette <- c("#009E73", "#56B4E9", "#E69F00", "#C7B900", "#D55E00", "#CC79A7", "#8EBD59", "#A377C8","#999999", "#EB6864", "#709DAD")
+
+# we have to turn the celltype into a factor with the same ordering for both ctrl and notch.
+seurat$celltype_manual <- factor(seurat$celltype_manual, 
+                                          levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk","MT", "dEC","mEC"))
+
+
+celltype_annotation <- DimPlot(seurat,
+        group.by = "celltype_manual",
+        label=T,
+        repel = T,
+        label.size = 4.1,
+        pt.size = 0.01,
+        raster = F,
+        label.box = T)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"),
+        plot.title = element_blank())+
+  scale_color_manual(values = color_palette[1:n_distinct(seurat$celltype_manual)])+
+  scale_fill_manual(values = color_palette[1:n_distinct(seurat$celltype_manual)])+
+  scale_y_reverse() 
+
+
+  
+
+plot_side_umap <- function(gene){
+  print(gene)
+  
+  p1<-FeaturePlot(seurat, features = gene,order=T,split.by = "perturbation", pt.size = 0.1)  +
+    theme(legend.position = "right") &
+    xlab("UMAP 1")&
+    ylab("UMAP 2")&
+    theme(plot.title = element_text(face = "bold",
+                                    size = 11, hjust = 0.5),
+          text = element_text(),
+          panel.background = element_rect(colour = NA),
+          plot.background = element_rect(colour = NA),
+          panel.border = element_rect(colour = NA),
+          axis.title = element_text(face = "bold",size = 8),
+          axis.title.y = element_text(angle=90,vjust =2),
+          axis.title.x = element_text(vjust = -0.2),
+          axis.line = element_line(colour="black"),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          plot.margin=unit(c(2,1,1,1),"mm"),
+          strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+          strip.text = element_text(face="bold"),
+          axis.ticks = element_blank(),
+          axis.text = element_blank()) &
+    scale_color_gradient(low="lightgrey",high = "darkred") &
+    scale_y_reverse() 
+  
+  
+  
+  p1 <- ggplotify::as.ggplot(p1 + plot_annotation(title = gene) & theme(plot.title =  element_text(size = 10)))
+  
+  return(p1)
+}
+  
+sff <- plot_side_umap("sff")
+meso18E <- plot_side_umap("meso18E")
+```
+
+
+
+```{r}
+# combine plots
+layout = '
+##BBBB
+AABBBB
+AACCCC
+##CCCC
+'
+
+combined<-wrap_plots(celltype_annotation, sff,meso18E)+
+  plot_layout(design = layout) + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 15, face="bold"),
+        legend.key.height = unit(3,"mm"))
+
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/Sup_fig11_sff_meso18E_expression.png", width = 10, height = 8,
+              res=350, units = "cm", scaling = 0.5)
+combined
+dev.off()
+```
+
+
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

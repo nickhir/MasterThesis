@@ -1,0 +1,206 @@
+---
+title: "Supplementary Figure 7 singleR concordance"
+author: "Nick Hirschmüller"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+---
+
+
+
+```{r setup, echo=F, message=F, error=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center")
+```
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(patchwork)
+library(Seurat)
+
+# load the plot theme
+source("/g/huber/users/hirschmueller/DECODE/MasterThesis/scripts/plot_theme.R")
+```
+
+
+```{r}
+# load the data
+notch <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/notch_3prime/results/integration/seurat_integration.qs")
+
+notch$celltype_manual <- ifelse(notch$celltype_manual == "unk2", "unk", notch$celltype_manual)
+
+# also some MT cells are labeled as pEC. This is because for the resolution that we chose, they were aggregated as one cluster and in that cluster pEC markers dominate. 
+# however the cells belonging to MT express specificall Smvt and ct (and are also predicted to be MT using the flygut atlas).
+MT_cells <-c("TX22_N_ACGTCCTAGTAAACAC-1", "TX22_N_ACTTATCGTAAGCTCT-1", "TX22_N_AGGCCACAGCTGAGTG-1",
+         "TX22_N_AGTGTTGCACAATGAA-1", "TX22_N_ATCACTTTCAGTGTTG-1", "TX22_N_ATCGTCCAGGGATCGT-1",
+         "TX22_N_ATTCAGGCACTGGATT-1", "TX22_N_CAGCGTGCAACGTATC-1", "TX22_N_CAGTGCGCAAACGAGC-1",
+         "TX22_N_CAGTTCCTCCGTAATG-1", "TX22_N_CATCCCATCATGCAGT-1", "TX22_N_CATGCCTAGCGTTCCG-1",
+         "TX22_N_CCGGTAGTCAAGGACG-1", "TX22_N_CTCAAGAAGAAACTCA-1", "TX22_N_GCCATTCGTACCGGAA-1",
+         "TX22_N_GCCCGAACATAAGATG-1", "TX22_N_GGTCACGCAGCGATTT-1", "TX22_N_GGTGAAGGTACTGCCG-1",
+         "TX22_N_GTACAGTGTAGGTAGC-1", "TX22_N_TAAGCCAGTGTCCATA-1", "TX22_N_TACCCGTGTTGGGACA-1",
+         "TX22_N_TCCACGTAGTGCAACG-1", "TX22_N_TGGATCATCGGTAGAG-1", "TX22_N_TGTCCACAGGTACCTT-1",
+         "TX22_N_TGTCCCAAGCCATTGT-1", "TX22_N_TTGTGTTGTAGCACGA-1", "TX22_N_TTTCCTCAGGACAACC-1",
+         "TX23_N_AACCTTTGTGTTTGCA-1", "TX23_N_ACACGCGCAAGTGTCT-1", "TX23_N_ATCGATGGTTCGCGTG-1",
+         "TX23_N_CATGAGTGTGCAATAA-1", "TX23_N_CGTTGGGCAGACGCTC-1", "TX23_N_CTCCATGCACACCTGG-1",
+         "TX23_N_GCTTGGGAGAATTTGG-1", "TX23_N_GGAGGTAAGACATCAA-1", "TX23_N_GTCTAGAGTTGCCATA-1",
+         "TX23_N_TACAGGTAGACCACGA-1", "TX23_N_TATCCTAGTATGCTAC-1", "TX23_N_TCACTATAGTCCCAAT-1",
+         "TX23_N_TTGAACGGTGCACATT-1", "TX23_N_TTGGATGAGCATCCCG-1")
+  
+notch$celltype_manual <- ifelse(rownames(notch@meta.data) %in% MT_cells,
+                                           "MT",
+                                           notch$celltype_manual)
+
+
+
+ctrl <- qs::qread("/g/huber/users/hirschmueller/DECODE/analysis/ctrl_3prime/results/integration/seurat_integration.qs")
+ctrl$celltype_manual <- ifelse(ctrl$celltype_manual == "HSP-EB", "EB", ctrl$celltype_manual)
+ctrl$celltype_manual <- ifelse(ctrl$celltype_manual == "R3", "mEC", ctrl$celltype_manual)
+```
+
+
+```{r}
+################
+# PROCESS CTRL #
+################
+# remove all cells that occure less than 20 times. This just clutters the visualization 
+keep_ctrl <- names(table(ctrl$singleR_flyatlas_annotation_pruned))[table(ctrl$singleR_flyatlas_annotation_pruned) > 20]
+ctrl <- ctrl[, ctrl$singleR_flyatlas_annotation_pruned %in% keep_ctrl]
+
+# define a color palette for our data
+color_palette <- c("#009E73", "#56B4E9", "#E69F00", "#C7B900", "#D55E00", "#CC79A7", "#8EBD59", "#A377C8","#999999", "#EB6864", "#709DAD")
+
+# we have to turn the celltype into a factor with the same ordering for both ctrl and notch.
+ctrl$celltype_manual <- factor(ctrl$celltype_manual, 
+                               levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk","MT", "dEC","mEC"))
+
+
+color_palette_singleR <- c("#009E73", "#56B4E9", "#C7B900", "#D55E00", "#CC79A7", "#8EBD59", "#999999", "#EB6864", "#709DAD")
+ctrl$singleR_flyatlas_annotation_pruned <- factor(ctrl$singleR_flyatlas_annotation_pruned, 
+                                          levels = c("ISC", "EB", "aEC", "Copper","pEC", "EE", "MT", "dEC", "LFC"))
+
+#############
+# PLOT CTRL #
+#############
+ctrl_umap <- DimPlot(ctrl,
+        group.by = "celltype_manual",
+        label=T,
+        repel = T,
+        label.size = 5.2,
+        pt.size = 0.01,
+        raster = F,
+        label.box = T)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))+
+  scale_color_manual(values = color_palette[1:n_distinct(ctrl$celltype_manual)])+
+  scale_fill_manual(values = color_palette[1:n_distinct(ctrl$celltype_manual)])+
+  scale_y_reverse() + # purely for visualization, so they are aligned like the notch.
+  ggtitle("Control\nManual Annotation")
+
+
+ctrl_singleR <- DimPlot(ctrl,
+        group.by = "singleR_flyatlas_annotation_pruned",
+        label=T,
+        repel = T,
+        label.size = 5.2,
+        pt.size = 0.01,
+        raster = F,
+        label.box = T)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))+
+  scale_color_manual(values = color_palette_singleR[1:n_distinct(ctrl$singleR_flyatlas_annotation_pruned)])+
+  scale_fill_manual(values = color_palette_singleR[1:n_distinct(ctrl$singleR_flyatlas_annotation_pruned)])+
+  scale_y_reverse() + # purely for visualization, so they are aligned like the notch.
+  ggtitle("Control\nSingleR Annotation")
+
+
+
+#################
+# PROCESS NOTCH #
+#################
+keep_notch <- names(table(notch$singleR_flyatlas_annotation_pruned))[table(notch$singleR_flyatlas_annotation_pruned) > 20]
+
+
+notch$celltype_manual <-  factor(notch$celltype_manual, 
+                                          levels = c("ISC", "EB", "daEC" ,"aEC", "Copper","pEC", "EE", "unk", "MT"))
+
+
+notch$singleR_flyatlas_annotation_pruned <- ifelse(notch$singleR_flyatlas_annotation_pruned=="adult midgut enterocyte","EC",notch$singleR_flyatlas_annotation_pruned)
+notch$singleR_flyatlas_annotation_pruned <- factor(notch$singleR_flyatlas_annotation_pruned, 
+                                                   levels = c("ISC", "EB", "aEC","Copper","pEC", "EE", "MT", "dEC", "LFC", "EC"))
+
+color_palette_singleR <- c("#009E73", "#56B4E9", "#C7B900", "#D55E00", "#CC79A7", "#8EBD59", "#999999", "#EB6864", "#709DAD", "#8BEBF0")
+
+##############
+# PLOT NOTCH #
+##############
+notch_umap <- DimPlot(notch,
+        group.by = "celltype_manual",
+        label=T,
+        repel = T,
+        label.size = 5.2,
+        pt.size = 0.01,
+        raster = F,
+        label.box = T)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))+
+  scale_color_manual(values = color_palette[1:n_distinct(notch$celltype_manual)])+
+  scale_fill_manual(values = color_palette[1:n_distinct(notch$celltype_manual)])+
+  scale_x_reverse() + # purely for visualization, so they are aligned like the notch.
+  ggtitle("Notch knockout\nManual Annotation")
+
+
+notch_singleR <- DimPlot(notch,
+        group.by = "singleR_flyatlas_annotation_pruned",
+        label=T,
+        repel = T,
+        label.size = 5.2,
+        pt.size = 0.01,
+        raster = F,
+        label.box = T)+
+  theme_UMAP() +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))+
+  scale_color_manual(values = color_palette_singleR[1:n_distinct(notch$singleR_flyatlas_annotation_pruned)])+
+  scale_fill_manual(values = color_palette_singleR[1:n_distinct(notch$singleR_flyatlas_annotation_pruned)])+
+  scale_x_reverse() + # purely for visualization, so they are aligned like the notch.
+  ggtitle("Notch knockout\nSingleR Annotation")
+```
+
+
+```{r}
+# combine plot
+combined_plot <- wrap_plots(ctrl_umap,ctrl_singleR,
+           notch_umap, notch_singleR,
+           ncol = 2) + 
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 20, face="bold"))
+
+
+ragg::agg_png("/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/Sup_fig7_singleR_concordance.png", width = 11, height = 9.5,
+              res=350, units = "cm", scaling = 0.5)
+combined_plot
+dev.off()
+```
+
+![](/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/Sup_fig7_singleR_concordance.png)
+
+
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
