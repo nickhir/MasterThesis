@@ -79,7 +79,7 @@ ctrl_pca <- DimPlot(ctrl_integrated,
         label=T,
         repel = T,
         shuffle = T,
-        label.size = 3.7,
+        label.size = 5,
         pt.size = 0.5,
         raster = F,
         label.box = T, reduction = "pca",cols=color_palette_alpha)+
@@ -110,7 +110,7 @@ ctrl_zoom_plot <- DimPlot(ctrl_zoom_subsampled,
         label=T,
         repel = T,
         shuffle = T,
-        label.size = 3.7,
+        label.size = 5,
         pt.size = 0.5,
         raster = F,
         label.box = T, reduction = "pca",cols=color_palette)+
@@ -158,7 +158,7 @@ notch_pca <- DimPlot(notch_integrated,
         label=T,
         repel = T,
         shuffle = T,
-        label.size = 3.7,
+        label.size = 5,
         pt.size = 0.5,
         raster = F,
         label.box = T, reduction = "pca",cols=color_palette_alpha)+
@@ -189,7 +189,7 @@ notch_zoom_plot <- DimPlot(notch_zoom_subsampled,
         label=T,
         repel = T,
         shuffle = T,
-        label.size = 3.7,
+        label.size = 5,
         pt.size = 0.5,
         raster = F,
         label.box = T, reduction = "pca",cols=color_palette)+
@@ -235,7 +235,8 @@ combined <- wrap_plots(ctrl_pca, ctrl_zoom_plot, plot_spacer(), feature_plot_ctr
            notch_pca, notch_zoom_plot, plot_spacer(), feature_plot_notch, vln_plot_notch,
            nrow = 2)+
   plot_layout(widths = c(1,1,0.1,1,0.4)) &
-  theme(axis.title = element_text(size=10, face="bold"))
+  theme(axis.title = element_text(size=10, face="bold"),
+        legend.text = element_text(size=13.1))
 
 
 ragg::agg_png(filename = "/g/huber/users/hirschmueller/DECODE/MasterThesis/plots/Sup_fig10_ISC_EB_similarity.png",

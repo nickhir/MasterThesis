@@ -77,7 +77,7 @@ notch_umap <- DimPlot(notch_integrated,
         group.by = "celltype_manual",
         label=T,
         repel = T,
-        label.size = 3.7,
+        label.size = 5.8,
         pt.size = 0.01,
         raster = F,
         label.box = T)+
@@ -124,7 +124,7 @@ notch_subset$EE_subtype <- factor(notch_subset$EE_subtype,
 notch_zoom <- DimPlot(notch_subset,
               group.by = "EE_subtype",
         label = T, label.box = T, 
-        repel = T,pt.size = 0.4, label.size = 3.7,) +
+        repel = T,pt.size = 0.4, label.size = 5.8,) +
   coord_cartesian(ylim=c(-12,0),xlim = c(7,-3)) +
   theme_UMAP()+
   NoLegend()+
@@ -137,7 +137,7 @@ ee_subtypes_notch$EE_subtype <- factor(ee_subtypes_notch$EE_subtype,
 pca_ee_subtypes <- DimPlot(ee_subtypes_notch,
                            reduction = "pca",group.by = "EE_subtype",
                            label = T, label.box = T, 
-                           repel = T,pt.size = 0.4,label.size = 3.7) +
+                           repel = T,pt.size = 0.4,label.size = 5.8) +
   scale_x_reverse()+
   theme_UMAP() + 
   NoLegend()+
@@ -178,7 +178,7 @@ ctrl_umap <- DimPlot(ctrl_integrated,
         group.by = "celltype_manual",
         label=T,
         repel = T,
-        label.size = 4.6,
+        label.size = 5.8,
         pt.size = 0.01,
         raster = F,
         label.box = T)+
@@ -225,7 +225,7 @@ ctrl_subset$EE_subtype <- factor(ctrl_subset$EE_subtype,
 ctrl_zoom <- DimPlot(ctrl_subset,
               group.by = "EE_subtype",
         label = T, label.box = T, 
-        repel = T,pt.size = 0.6, label.size = 3.7)+
+        repel = T,pt.size = 0.6, label.size = 5.8)+
   coord_cartesian(xlim = c(-1.3,1.3), ylim=c(8.2,12))+
   theme_UMAP()+
   NoLegend()+
@@ -239,7 +239,7 @@ ee_subtypes_ctrl$EE_subtype <- factor(ctrl_subset$EE_subtype,
 pca_ee_subtypes_ctrl <- DimPlot(ee_subtypes_ctrl,
                            reduction = "pca",group.by = "EE_subtype",
                            label = T, label.box = T, 
-                           repel = T,pt.size = 0.6,label.size = 3.7) +
+                           repel = T,pt.size = 0.6,label.size = 5.8) +
   scale_x_reverse()+
   theme_UMAP() + 
   NoLegend()+
